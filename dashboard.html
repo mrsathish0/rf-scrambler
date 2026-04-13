@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dual IDS — WiFi + Wired Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Bebas+Neue&family=Barlow:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#07090d;--panel:#0d1118;--panel2:#111722;
+  --border:#1e2d3d;--border2:#162030;
+  --wifi:#00d4ff;--eth:#39ff6e;
+  --yellow:#ffd600;--orange:#ff7c2a;--red:#ff2d55;
+  --dim:#3a5060;--text:#b8d4e0;--text2:#5a7888;
+  --mono:'Courier Prime',monospace;
+  --ui:'Barlow',sans-serif;
+  --hd:'Bebas Neue',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--ui);min-height:100vh;
+  overflow-x:hidden;
+  background-image:
+    radial-gradient(ellipse 60% 40% at 20% 0%,rgba(0,212,255,0.05) 0%,transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 100%,rgba(57,255,110,0.04) 0%,transparent 60%),
+    repeating-linear-gradient(0deg,transparent,transparent 59px,rgba(30,45,61,0.3) 59px,rgba(30,45,61,0.3) 60px),
+    repeating-linear-gradient(90deg,transparent,transparent 59px,rgba(30,45,61,0.3) 59px,rgba(30,45,61,0.3) 60px);
+}
+
+/* Scanlines */
+body::after{content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.06) 3px,rgba(0,0,0,0.06) 4px);
+  pointer-events:none;z-index:9999}
+
+/* ── Header ── */
+header{
+  padding:0 32px;height:64px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border);
+  background:rgba(13,17,24,0.95);backdrop-filter:blur(12px);
+  position:sticky;top:0;z-index:100}
+
+.logo{display:flex;align-items:center;gap:20px}
+.logo-mark{
+  display:flex;gap:6px;align-items:center}
+.lm-wifi{width:28px;height:28px;border:2px solid var(--wifi);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 12px rgba(0,212,255,0.3);font-size:14px}
+.lm-eth{width:28px;height:28px;border:2px solid var(--eth);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 12px rgba(57,255,110,0.3);font-size:14px}
+.lm-plus{font-family:var(--hd);font-size:20px;color:var(--dim)}
+.logo-text h1{font-family:var(--hd);font-size:22px;letter-spacing:3px;color:var(--text)}
+.logo-text p{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:2px}
+
+.hdr-right{display:flex;align-items:center;gap:20px}
+.clock{font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:2px}
+
+.conn-pill{
+  display:flex;align-items:center;gap:7px;
+  padding:5px 14px;border-radius:16px;border:1px solid var(--border);
+  font-family:var(--mono);font-size:10px;letter-spacing:1px}
+.conn-pill.ok{color:var(--eth);background:rgba(57,255,110,0.05);border-color:rgba(57,255,110,0.2)}
+.conn-pill.off{color:var(--red);background:rgba(255,45,85,0.05);border-color:rgba(255,45,85,0.2)}
+.cdot{width:6px;height:6px;border-radius:50%;background:currentColor;
+  box-shadow:0 0 6px currentColor;animation:blink 1.4s ease infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+
+/* ── Main layout ── */
+.main{max-width:1440px;margin:0 auto;padding:24px 32px 60px;
+  display:grid;grid-template-columns:1fr 1fr;
+  grid-template-rows:auto auto 1fr auto;gap:18px}
+
+/* ── Top stats bar ── */
+.stats-bar{grid-column:1/-1;display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+
+.stat{
+  background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:16px 18px;position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:var(--accent,var(--wifi))}
+.stat-label{font-family:var(--mono);font-size:8px;color:var(--text2);
+  letter-spacing:2px;text-transform:uppercase;margin-bottom:8px}
+.stat-val{font-family:var(--hd);font-size:28px;color:var(--accent,var(--wifi));letter-spacing:1px}
+.stat-sub{font-size:10px;color:var(--text2);margin-top:4px}
+
+/* ── Channel panels ── */
+.channel-panel{
+  background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;display:flex;flex-direction:column}
+.channel-panel.wifi-panel{border-top:2px solid var(--wifi)}
+.channel-panel.eth-panel {border-top:2px solid var(--eth)}
+
+.cp-header{
+  padding:14px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between}
+.cp-title{display:flex;align-items:center;gap:10px}
+.cp-icon{font-size:16px}
+.cp-name{font-family:var(--hd);font-size:18px;letter-spacing:2px}
+.wifi-panel .cp-name{color:var(--wifi)}
+.eth-panel  .cp-name{color:var(--eth)}
+.cp-status{
+  font-family:var(--mono);font-size:10px;
+  padding:4px 12px;border-radius:12px;letter-spacing:1px}
+.cp-status.clear{background:rgba(57,255,110,0.1);color:var(--eth);
+  border:1px solid rgba(57,255,110,0.2)}
+.cp-status.attack{background:rgba(255,45,85,0.1);color:var(--red);
+  border:1px solid rgba(255,45,85,0.3);animation:pulse-red 0.8s ease infinite alternate}
+@keyframes pulse-red{from{box-shadow:none}to{box-shadow:0 0 12px rgba(255,45,85,0.4)}}
+
+/* Threat arc */
+.arc-section{padding:20px;display:flex;gap:20px;align-items:center;
+  border-bottom:1px solid var(--border)}
+.arc-wrap{position:relative;width:120px;height:65px;flex-shrink:0}
+.arc-wrap svg{width:120px;height:120px;position:absolute;top:0;left:0}
+.arc-pct{position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+  font-family:var(--hd);font-size:22px;line-height:1}
+.arc-level{font-family:var(--hd);font-size:13px;letter-spacing:3px;margin-top:4px}
+
+.attack-info{flex:1}
+.atk-name{font-family:var(--hd);font-size:20px;letter-spacing:2px;margin-bottom:6px}
+.atk-conf{font-family:var(--mono);font-size:11px;color:var(--text2);margin-bottom:12px}
+.atk-bars{display:flex;flex-direction:column;gap:7px}
+.atk-bar-row{display:flex;flex-direction:column;gap:3px}
+.atk-bar-meta{display:flex;justify-content:space-between;
+  font-family:var(--mono);font-size:9px;color:var(--text2)}
+.atk-track{height:3px;background:var(--border);border-radius:2px}
+.atk-fill{height:100%;border-radius:2px;transition:width 0.7s ease}
+
+/* Event log */
+.log-section{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.log-head{padding:10px 20px;border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-size:9px;color:var(--text2);letter-spacing:2px;
+  display:flex;justify-content:space-between}
+.log-body{flex:1;overflow-y:auto;max-height:200px;padding:6px 0}
+.log-body::-webkit-scrollbar{width:3px}
+.log-body::-webkit-scrollbar-thumb{background:var(--border)}
+
+.log-row{
+  display:grid;grid-template-columns:80px 80px 1fr 60px;
+  align-items:center;gap:8px;
+  padding:6px 20px;border-left:2px solid transparent;
+  font-family:var(--mono);font-size:10px;
+  animation:log-in 0.3s ease}
+@keyframes log-in{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.log-row:hover{background:rgba(255,255,255,0.02)}
+.log-row.clear{color:var(--text2)}
+.log-row.low   {border-color:var(--yellow);background:rgba(255,214,0,0.03)}
+.log-row.med   {border-color:var(--orange);background:rgba(255,124,42,0.03)}
+.log-row.high  {border-color:var(--red);   background:rgba(255,45,85,0.04)}
+.log-time{color:var(--dim)}
+.log-src{color:var(--text2)}
+.log-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:8px;font-weight:700}
+.badge-clear{background:rgba(57,255,110,0.1);color:var(--eth)}
+.badge-low  {background:rgba(255,214,0,0.12);color:var(--yellow)}
+.badge-med  {background:rgba(255,124,42,0.12);color:var(--orange)}
+.badge-high {background:rgba(255,45,85,0.14);color:var(--red)}
+.log-conf{text-align:right;color:var(--dim)}
+
+/* ── Bottom row ── */
+.bottom-row{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr 360px;gap:18px}
+
+/* Packet rate chart */
+.chart-panel{background:var(--panel);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden}
+.chart-head{padding:12px 18px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center}
+.chart-title{font-family:var(--mono);font-size:9px;color:var(--text2);letter-spacing:2px}
+.chart-body{padding:14px 16px 16px}
+canvas{width:100%!important;height:110px!important}
+
+/* Combined severity panel */
+.severity-panel{background:var(--panel);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.sev-head{padding:14px 20px;border-bottom:1px solid var(--border);
+  font-family:var(--hd);font-size:16px;letter-spacing:2px;color:var(--text)}
+.sev-body{flex:1;padding:20px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px}
+.sev-level{
+  font-family:var(--hd);font-size:48px;letter-spacing:4px;
+  transition:color 0.4s,text-shadow 0.4s}
+.sev-level.l0{color:var(--eth);text-shadow:0 0 20px rgba(57,255,110,0.4)}
+.sev-level.l1{color:var(--yellow);text-shadow:0 0 20px rgba(255,214,0,0.4)}
+.sev-level.l2{color:var(--orange);text-shadow:0 0 20px rgba(255,124,42,0.5)}
+.sev-level.l3{color:var(--red);text-shadow:0 0 30px rgba(255,45,85,0.6);
+  animation:crit 0.6s ease infinite alternate}
+@keyframes crit{from{text-shadow:0 0 20px rgba(255,45,85,0.4)}
+  to{text-shadow:0 0 40px rgba(255,45,85,0.9)}}
+.sev-desc{font-family:var(--mono);font-size:10px;color:var(--text2);letter-spacing:2px;text-align:center}
+.sev-bars{width:100%;display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.sev-bar-row{display:flex;align-items:center;gap:8px}
+.sev-bar-label{font-family:var(--mono);font-size:9px;width:40px;color:var(--text2)}
+.sev-bar-track{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.sev-bar-fill{height:100%;border-radius:3px;transition:width 0.7s ease}
+.sev-bar-val{font-family:var(--mono);font-size:9px;width:30px;text-align:right;color:var(--text2)}
+
+/* Coordinated attack banner */
+#coord-banner{
+  display:none;grid-column:1/-1;
+  background:rgba(255,45,85,0.08);border:1px solid rgba(255,45,85,0.4);
+  border-radius:10px;padding:14px 24px;
+  display:flex;align-items:center;gap:16px}
+#coord-banner.show{display:flex;animation:banner-in 0.4s ease}
+@keyframes banner-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.banner-icon{font-size:24px}
+.banner-text{font-family:var(--hd);font-size:18px;letter-spacing:3px;color:var(--red)}
+.banner-sub{font-family:var(--mono);font-size:10px;color:rgba(255,45,85,0.7);margin-top:2px}
+
+/* MQTT bar */
+.mqtt-bar{
+  position:fixed;bottom:0;left:0;right:0;
+  background:rgba(13,17,24,0.97);border-top:1px solid var(--border);
+  padding:9px 32px;display:flex;align-items:center;gap:20px;z-index:100}
+.mqtt-item{display:flex;align-items:center;gap:7px;
+  font-family:var(--mono);font-size:10px;color:var(--text2)}
+.mqtt-sep{width:1px;height:14px;background:var(--border)}
+.mqtt-input-row{margin-left:auto;display:flex;gap:8px;align-items:center}
+.mqtt-inp{background:transparent;border:1px solid var(--border);color:var(--text);
+  font-family:var(--mono);font-size:10px;padding:5px 10px;border-radius:4px;
+  outline:none;width:190px;transition:border-color 0.2s}
+.mqtt-inp:focus{border-color:var(--wifi)}
+.btn{background:transparent;border:1px solid;font-family:var(--mono);
+  font-size:9px;letter-spacing:2px;padding:5px 14px;border-radius:4px;cursor:pointer;transition:all 0.2s}
+.btn-wifi{border-color:var(--wifi);color:var(--wifi)}
+.btn-wifi:hover{background:rgba(0,212,255,0.1)}
+.btn-demo{border-color:var(--yellow);color:var(--yellow)}
+.btn-demo:hover{background:rgba(255,214,0,0.08)}
+
+/* Flash overlay */
+#flash{display:none;position:fixed;inset:0;pointer-events:none;z-index:50;
+  animation:flash-anim 0.5s ease}
+@keyframes flash-anim{0%,100%{opacity:0}40%{opacity:1}}
+</style>
+</head>
+<body>
+
+<div id="flash"></div>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <div class="lm-wifi">📡</div>
+      <div class="lm-plus">+</div>
+      <div class="lm-eth">🔌</div>
+    </div>
+    <div class="logo-text">
+      <h1>DUAL NETWORK IDS</h1>
+      <p>ESP32-S3 · WIRELESS + WIRED · ML INFERENCE</p>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div class="conn-pill off" id="mqtt-pill">
+      <div class="cdot"></div>
+      <span id="mqtt-label">MQTT: DISCONNECTED</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Coordinated attack banner (hidden by default) -->
+  <div id="coord-banner">
+    <div class="banner-icon">⚠️</div>
+    <div>
+      <div class="banner-text">COORDINATED DUAL-CHANNEL ATTACK DETECTED</div>
+      <div class="banner-sub">Both WiFi and Ethernet are under attack simultaneously</div>
+    </div>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stat" style="--accent:var(--wifi)">
+      <div class="stat-label">// WiFi Alerts</div>
+      <div class="stat-val" id="s-wifi-alerts">0</div>
+      <div class="stat-sub">total detections</div>
+    </div>
+    <div class="stat" style="--accent:var(--eth)">
+      <div class="stat-label">// Eth Alerts</div>
+      <div class="stat-val" id="s-eth-alerts">0</div>
+      <div class="stat-sub">total detections</div>
+    </div>
+    <div class="stat" style="--accent:var(--yellow)">
+      <div class="stat-label">// WiFi pkt/s</div>
+      <div class="stat-val" id="s-wifi-rate">0</div>
+      <div class="stat-sub">last window</div>
+    </div>
+    <div class="stat" style="--accent:var(--yellow)">
+      <div class="stat-label">// Eth pkt/s</div>
+      <div class="stat-val" id="s-eth-rate">0</div>
+      <div class="stat-sub">last window</div>
+    </div>
+    <div class="stat" style="--accent:var(--wifi)">
+      <div class="stat-label">// WiFi Conf</div>
+      <div class="stat-val" id="s-wifi-conf">—</div>
+      <div class="stat-sub">last inference</div>
+    </div>
+    <div class="stat" style="--accent:var(--eth)">
+      <div class="stat-label">// Eth Conf</div>
+      <div class="stat-val" id="s-eth-conf">—</div>
+      <div class="stat-sub">last inference</div>
+    </div>
+  </div>
+
+  <!-- WiFi Channel Panel -->
+  <div class="channel-panel wifi-panel">
+    <div class="cp-header">
+      <div class="cp-title">
+        <span class="cp-icon">📡</span>
+        <span class="cp-name">WIRELESS CHANNEL</span>
+      </div>
+      <div class="cp-status clear" id="wifi-status">MONITORING</div>
+    </div>
+
+    <div class="arc-section">
+      <div class="arc-wrap">
+        <svg viewBox="0 0 120 120">
+          <path fill="none" stroke="var(--border)" stroke-width="8" stroke-linecap="round"
+            d="M 15 95 A 50 50 0 1 1 105 95"/>
+          <path id="wifi-arc" fill="none" stroke="var(--eth)" stroke-width="8"
+            stroke-linecap="round" stroke-dasharray="204" stroke-dashoffset="204"
+            d="M 15 95 A 50 50 0 1 1 105 95"
+            style="transition:stroke-dashoffset 1s ease,stroke 0.5s"/>
+        </svg>
+        <div class="arc-pct" id="wifi-pct" style="color:var(--eth)">0%</div>
+      </div>
+      <div class="attack-info">
+        <div class="atk-name" id="wifi-atk-name" style="color:var(--eth)">CLEAR</div>
+        <div class="atk-conf" id="wifi-atk-conf">Waiting for data...</div>
+        <div class="atk-bars">
+          <div class="atk-bar-row">
+            <div class="atk-bar-meta"><span style="color:var(--red)">Deauth Flood</span><span id="wb-deauth">0%</span></div>
+            <div class="atk-track"><div class="atk-fill" id="wbf-deauth" style="background:var(--red)"></div></div>
+          </div>
+          <div class="atk-bar-row">
+            <div class="atk-bar-meta"><span style="color:var(--orange)">Evil Twin</span><span id="wb-evil">0%</span></div>
+            <div class="atk-track"><div class="atk-fill" id="wbf-evil" style="background:var(--orange)"></div></div>
+          </div>
+          <div class="atk-bar-row">
+            <div class="atk-bar-meta"><span style="color:var(--yellow)">Probe Flood</span><span id="wb-probe">0%</span></div>
+            <div class="atk-track"><div class="atk-fill" id="wbf-probe" style="background:var(--yellow)"></div></div>
+          </div>
+          <div class="atk-bar-row">
+            <div class="atk-bar-meta"><span style="color:var(--yellow)">Disassoc</span><span id="wb-disassoc">0%</span></div>
+            <div class="atk-track"><div class="atk-fill" id="wbf-disassoc" style="background:var(--yellow);opacity:0.7"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="log-section">
+      <div class="log-head">
+        <span>WIFI EVENT LOG</span>
+        <span id="wifi-log-count">0 EVENTS</span>
+      </div>
+      <div class="log-body" id="wifi-log"></div>
+    </div>
+  </div>
+
+  <!-- Ethernet Channel Panel -->
+  <div class="channel-panel eth-panel">
+    <div class="cp-header">
+      <div class="cp-title">
+        <span class="cp-icon">🔌</span>
+        <span class="cp-name">WIRED CHANNEL</span>
+      </div>
+      <div class="cp-status clear" id="eth-status">MONITORING</div>
+    </div>
+
+    <div class="arc-section">
+      <div class="arc-wrap">
+        <svg viewBox="0 0 120 120">
+          <path fill="none" stroke="var(--border)" stroke-width="8" stroke-linecap="round"
+            d="M 15 95 A 50 50 0 1 1 105 95"/>
+          <path id="eth-arc" fill="none" stroke="var(--eth)" stroke-width="8"
+            stroke-linecap="round" stroke-dasharray="204" stroke-dashoffset="204"
+            d="M 15 95 A 50 50 0 1 1 105 95"
+            style="transition:stroke-dashoffset 1s ease,stroke 0.5s"/>
+        </svg>
+        <div class="arc-pct" id="eth-pct" style="color:var(--eth)">0%</div>
+      </div>
+      <div class="attack-info">
+        <div class="atk-name" id="eth-atk-name" style="color:var(--eth)">CLEAR</div>
+        <div class="atk-conf" id="eth-atk-conf">Waiting for data...</div>
+        <div class="atk-bars">
+          <div class="atk-bar-row">
+            <div class="atk-bar-meta"><span style="color:var(--red)">Port Scan</span><span id="eb-port">0%</span></div>
+            <div class="atk-track"><div class="atk-fill" id="ebf-port" style="background:var(--red)"></div></div>
+          </div>
+          <div class="atk-bar-row">
+            <div class="atk-bar-meta"><span style="color:var(--orange)">ARP Spoof</span><span id="eb-arp">0%</span></div>
+            <div class="atk-track"><div class="atk-fill" id="ebf-arp" style="background:var(--orange)"></div></div>
+          </div>
+          <div class="atk-bar-row">
+            <div class="atk-bar-meta"><span style="color:var(--red)">DoS/DDoS</span><span id="eb-dos">0%</span></div>
+            <div class="atk-track"><div class="atk-fill" id="ebf-dos" style="background:var(--red);opacity:0.8"></div></div>
+          </div>
+          <div class="atk-bar-row">
+            <div class="atk-bar-meta"><span style="color:var(--orange)">MITM</span><span id="eb-mitm">0%</span></div>
+            <div class="atk-track"><div class="atk-fill" id="ebf-mitm" style="background:var(--orange);opacity:0.7"></div></div>
+          </div>
+          <div class="atk-bar-row">
+            <div class="atk-bar-meta"><span style="color:var(--red)">SYN Flood</span><span id="eb-syn">0%</span></div>
+            <div class="atk-track"><div class="atk-fill" id="ebf-syn" style="background:var(--red);opacity:0.6"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="log-section">
+      <div class="log-head">
+        <span>ETH EVENT LOG</span>
+        <span id="eth-log-count">0 EVENTS</span>
+      </div>
+      <div class="log-body" id="eth-log"></div>
+    </div>
+  </div>
+
+  <!-- Bottom row -->
+  <div class="bottom-row">
+
+    <!-- WiFi rate chart -->
+    <div class="chart-panel">
+      <div class="chart-head">
+        <span class="chart-title" style="color:var(--wifi)">📡 WIFI PACKET RATE</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--dim)">60s HISTORY</span>
+      </div>
+      <div class="chart-body"><canvas id="wifiChart"></canvas></div>
+    </div>
+
+    <!-- Eth rate chart -->
+    <div class="chart-panel">
+      <div class="chart-head">
+        <span class="chart-title" style="color:var(--eth)">🔌 ETH PACKET RATE</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--dim)">60s HISTORY</span>
+      </div>
+      <div class="chart-body"><canvas id="ethChart"></canvas></div>
+    </div>
+
+    <!-- Combined severity -->
+    <div class="severity-panel">
+      <div class="sev-head">COMBINED SEVERITY</div>
+      <div class="sev-body">
+        <div class="sev-level l0" id="sev-level">CLEAR</div>
+        <div class="sev-desc" id="sev-desc">Both channels nominal</div>
+        <div class="sev-bars">
+          <div class="sev-bar-row">
+            <div class="sev-bar-label" style="color:var(--wifi)">WiFi</div>
+            <div class="sev-bar-track">
+              <div class="sev-bar-fill" id="sev-wifi-bar" style="background:var(--wifi);width:0%"></div>
+            </div>
+            <div class="sev-bar-val" id="sev-wifi-val">0</div>
+          </div>
+          <div class="sev-bar-row">
+            <div class="sev-bar-label" style="color:var(--eth)">Eth</div>
+            <div class="sev-bar-track">
+              <div class="sev-bar-fill" id="sev-eth-bar" style="background:var(--eth);width:0%"></div>
+            </div>
+            <div class="sev-bar-val" id="sev-eth-val">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MQTT bar -->
+<div class="mqtt-bar">
+  <div class="mqtt-item">
+    <div class="cdot" id="broker-dot" style="color:var(--red)"></div>
+    <span id="broker-label">Broker: disconnected</span>
+  </div>
+  <div class="mqtt-sep"></div>
+  <div class="mqtt-item" id="uptime-item">Uptime: 00:00:00</div>
+  <div class="mqtt-sep"></div>
+  <div class="mqtt-item" id="last-event-item" style="color:var(--dim)">No events yet</div>
+  <div class="mqtt-input-row">
+    <input class="mqtt-inp" id="broker-ip" placeholder="Broker IP (e.g. 192.168.1.100)" value="10.250.191.241"/>
+    <button class="btn btn-wifi" onclick="connectMQTT()">CONNECT</button>
+    <button class="btn btn-demo" onclick="startDemo()">DEMO</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+<script>
+// ─── State ────────────────────────────────────────────────
+const S = {
+  wifiAlerts:0, ethAlerts:0,
+  wifiCounts:{deauth:0,evil:0,probe:0,disassoc:0},
+  ethCounts:{port:0,arp:0,dos:0,mitm:0,syn:0},
+  wifiHistory:Array(60).fill(0), wifiAttack:Array(60).fill(false),
+  ethHistory: Array(60).fill(0), ethAttack: Array(60).fill(false),
+  wifiThreat:0, ethThreat:0,
+  wifiLogCount:0, ethLogCount:0,
+  mqttClient:null, startTime:Date.now(), demoInterval:null,
+};
+
+const SEV_WIFI=[0,3,2,1,3];
+const SEV_ETH =[0,2,3,3,2,3];
+const ARC_LEN=204;
+
+// ─── Clock / Uptime ───────────────────────────────────────
+function pad(n){return String(n).padStart(2,'0')}
+setInterval(()=>{
+  const d=new Date();
+  document.getElementById('clock').textContent=`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const up=Math.floor((Date.now()-S.startTime)/1000);
+  document.getElementById('uptime-item').textContent=
+    `Uptime: ${pad(Math.floor(up/3600))}:${pad(Math.floor(up%3600/60))}:${pad(up%60)}`;
+},1000);
+
+// ─── Arc meter ────────────────────────────────────────────
+function setArc(id, pct, isAttack){
+  const arc=document.getElementById(id+'-arc');
+  const pctEl=document.getElementById(id+'-pct');
+  const offset=ARC_LEN-(ARC_LEN*pct/100);
+  arc.style.strokeDashoffset=offset;
+  const color = pct<20?'var(--eth)':pct<50?'var(--yellow)':pct<75?'var(--orange)':'var(--red)';
+  arc.style.stroke=color;
+  pctEl.style.color=color;
+  pctEl.textContent=Math.round(pct)+'%';
+}
+
+// ─── Process MQTT payload ─────────────────────────────────
+function process(data){
+  const w=data.wifi||{}, e=data.eth||{};
+  const wc=w.class||0, ec=e.class||0;
+  const wconf=w.conf||0, econf=e.conf||0;
+  const wrate=w.pkt_rate||0, erate=e.pkt_rate||0;
+  const ws=SEV_WIFI[wc]||0, es=SEV_ETH[ec]||0;
+  const combined=Math.max(ws,es);
+
+  // Stats
+  document.getElementById('s-wifi-rate').textContent=wrate.toFixed(1);
+  document.getElementById('s-eth-rate').textContent =erate.toFixed(1);
+  document.getElementById('s-wifi-conf').textContent=(wconf*100).toFixed(0)+'%';
+  document.getElementById('s-eth-conf').textContent =(econf*100).toFixed(0)+'%';
+
+  if(wc>0){S.wifiAlerts++;document.getElementById('s-wifi-alerts').textContent=S.wifiAlerts;}
+  if(ec>0){S.ethAlerts++; document.getElementById('s-eth-alerts').textContent=S.ethAlerts;}
+
+  // WiFi attack bars
+  if(wc>0){
+    const k=['deauth','evil','probe','disassoc'];
+    S.wifiCounts[k[wc-1]]=S.wifiCounts[k[wc-1]]||0+1;
+    const total=Object.values(S.wifiCounts).reduce((a,b)=>a+b,0)||1;
+    Object.entries(S.wifiCounts).forEach(([k,v])=>{
+      const pct=(v/total*100).toFixed(0);
+      const el=document.getElementById('wbf-'+k);
+      if(el){el.style.width=pct+'%';}
+      const lbl=document.getElementById('wb-'+k);
+      if(lbl) lbl.textContent=pct+'%';
+    });
+  }
+
+  // Eth attack bars
+  if(ec>0){
+    const k=['port','arp','dos','mitm','syn'];
+    if(k[ec-1]) S.ethCounts[k[ec-1]]=(S.ethCounts[k[ec-1]]||0)+1;
+    const total=Object.values(S.ethCounts).reduce((a,b)=>a+b,0)||1;
+    Object.entries(S.ethCounts).forEach(([k,v])=>{
+      const pct=(v/total*100).toFixed(0);
+      const el=document.getElementById('ebf-'+k);
+      if(el){el.style.width=pct+'%';}
+      const lbl=document.getElementById('eb-'+k);
+      if(lbl) lbl.textContent=pct+'%';
+    });
+  }
+
+  // Threat arcs
+  S.wifiThreat = wc>0 ? Math.min(100,S.wifiThreat*0.7+ws*30) : S.wifiThreat*0.9;
+  S.ethThreat  = ec>0 ? Math.min(100,S.ethThreat*0.7+es*30)  : S.ethThreat*0.9;
+  setArc('wifi', S.wifiThreat, wc>0);
+  setArc('eth',  S.ethThreat,  ec>0);
+
+  // Attack names
+  const wNames=['CLEAR','DEAUTH FLOOD','EVIL TWIN','PROBE FLOOD','DISASSOC'];
+  const eNames=['CLEAR','PORT SCAN','ARP SPOOF','DoS / DDoS','MITM','SYN FLOOD'];
+  document.getElementById('wifi-atk-name').textContent=wNames[wc]||'CLEAR';
+  document.getElementById('wifi-atk-name').style.color=wc?'var(--red)':'var(--eth)';
+  document.getElementById('wifi-atk-conf').textContent=`Confidence: ${(wconf*100).toFixed(1)}% | ${wrate.toFixed(1)} pkt/s`;
+  document.getElementById('eth-atk-name').textContent=eNames[ec]||'CLEAR';
+  document.getElementById('eth-atk-name').style.color=ec?'var(--red)':'var(--eth)';
+  document.getElementById('eth-atk-conf').textContent=`Confidence: ${(econf*100).toFixed(1)}% | ${erate.toFixed(1)} pkt/s`;
+
+  // Status pills
+  const wpill=document.getElementById('wifi-status');
+  wpill.textContent=wc?wNames[wc]:'MONITORING';
+  wpill.className='cp-status '+(wc?'attack':'clear');
+  const epill=document.getElementById('eth-status');
+  epill.textContent=ec?eNames[ec]:'MONITORING';
+  epill.className='cp-status '+(ec?'attack':'clear');
+
+  // Combined severity
+  const sevLabels=['CLEAR','CAUTION','WARNING','CRITICAL'];
+  const sevDescs=[
+    'Both channels nominal',
+    'Low-level activity detected',
+    'Attack in progress — monitor closely',
+    'CRITICAL — immediate action required'
+  ];
+  const sevEl=document.getElementById('sev-level');
+  sevEl.textContent=sevLabels[combined]||'CLEAR';
+  sevEl.className='sev-level l'+combined;
+  document.getElementById('sev-desc').textContent=sevDescs[combined]||sevDescs[0];
+  document.getElementById('sev-wifi-bar').style.width=(ws/3*100)+'%';
+  document.getElementById('sev-eth-bar').style.width =(es/3*100)+'%';
+  document.getElementById('sev-wifi-val').textContent=ws;
+  document.getElementById('sev-eth-val').textContent=es;
+
+  // Coordinated attack banner
+  const banner=document.getElementById('coord-banner');
+  if(ws===3&&es===3){banner.classList.add('show');}
+  else{banner.classList.remove('show');}
+
+  // Flash overlay
+  if(combined>=3){
+    const fl=document.getElementById('flash');
+    fl.style.background='rgba(255,45,85,0.06)';
+    fl.style.display='block';
+    setTimeout(()=>{fl.style.display='none';},600);
+  }
+
+  // Charts
+  S.wifiHistory.shift(); S.wifiHistory.push(wrate);
+  S.wifiAttack.shift();  S.wifiAttack.push(wc>0);
+  S.ethHistory.shift();  S.ethHistory.push(erate);
+  S.ethAttack.shift();   S.ethAttack.push(ec>0);
+  drawChart('wifiChart',S.wifiHistory,S.wifiAttack,'#00d4ff');
+  drawChart('ethChart', S.ethHistory, S.ethAttack, '#39ff6e');
+
+  // Logs
+  addLog('wifi', wc, wconf, w.channel||0, wNames[wc], wrate);
+  addLog('eth',  ec, econf, 0,             eNames[ec], erate);
+
+  // Last event
+  if(wc>0||ec>0){
+    document.getElementById('last-event-item').style.color='var(--red)';
+    document.getElementById('last-event-item').textContent=
+      `LAST: ${wc>0?wNames[wc]:''} ${ec>0?eNames[ec]:''}`.trim();
+  }
+}
+
+// ─── Add log row ──────────────────────────────────────────
+function addLog(ch, cls, conf, channel, name, rate){
+  const sev = ch==='wifi'?SEV_WIFI[cls]:SEV_ETH[cls];
+  const sevCls=['clear','low','med','high'][sev]||'clear';
+  const badgeCls=['badge-clear','badge-low','badge-med','badge-high'][sev];
+  const d=new Date();
+  const ts=`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const body=document.getElementById(ch+'-log');
+  const row=document.createElement('div');
+  row.className=`log-row ${sevCls}`;
+  row.innerHTML=`
+    <span class="log-time">${ts}</span>
+    <span class="log-src">${channel?'CH'+channel:''}</span>
+    <span><span class="log-badge ${badgeCls}">${name}</span></span>
+    <span class="log-conf">${(conf*100).toFixed(0)}%</span>`;
+  body.insertBefore(row,body.firstChild);
+  while(body.children.length>60) body.removeChild(body.lastChild);
+  const countEl=document.getElementById(ch+'-log-count');
+  if(ch==='wifi'){S.wifiLogCount++;countEl.textContent=S.wifiLogCount+' EVENTS';}
+  else           {S.ethLogCount++; countEl.textContent=S.ethLogCount+' EVENTS';}
+}
+
+// ─── Canvas chart ─────────────────────────────────────────
+function drawChart(id, data, attacks, color){
+  const canvas=document.getElementById(id);
+  const w=canvas.offsetWidth, h=110;
+  canvas.width=w; canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,w,h);
+  const max=Math.max(...data,10);
+  const step=w/(data.length-1);
+
+  // Grid
+  [0.25,0.5,0.75,1].forEach(r=>{
+    const y=h-(r*h*0.85)-8;
+    ctx.strokeStyle='rgba(30,45,61,0.8)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    ctx.fillStyle='rgba(90,120,136,0.6)'; ctx.font='8px Courier Prime,monospace';
+    ctx.fillText(Math.round(r*max),2,y-2);
+  });
+
+  // Attack markers
+  data.forEach((v,i)=>{
+    if(!attacks[i]) return;
+    const x=i*step, y=h-(v/max*h*0.85)-8;
+    ctx.beginPath(); ctx.moveTo(x,h); ctx.lineTo(x,y);
+    ctx.strokeStyle='rgba(255,45,85,0.5)'; ctx.lineWidth=2; ctx.stroke();
+  });
+
+  // Fill gradient
+  const g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,color.replace(')',',0.2)').replace('rgb','rgba'));
+  g.addColorStop(1,color.replace(')',',0)').replace('rgb','rgba'));
+  ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x=i*step, y=h-(v/max*h*0.85)-8;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath();
+  ctx.fillStyle=g; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x=i*step, y=h-(v/max*h*0.85)-8;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle=color; ctx.lineWidth=1.5;
+  ctx.shadowColor=color; ctx.shadowBlur=6; ctx.stroke(); ctx.shadowBlur=0;
+}
+
+// ─── MQTT ─────────────────────────────────────────────────
+function connectMQTT(){
+  const ip=document.getElementById('broker-ip').value.trim();
+  if(!ip) return;
+  if(S.mqttClient) S.mqttClient.end();
+  try{
+    S.mqttClient=mqtt.connect(`ws://${ip}:9001`);
+    S.mqttClient.on('connect',()=>{
+      document.getElementById('mqtt-pill').className='conn-pill ok';
+      document.getElementById('mqtt-label').textContent=`MQTT: ${ip}`;
+      document.getElementById('broker-dot').style.color='var(--eth)';
+      document.getElementById('broker-label').textContent=`Broker: ${ip}`;
+      S.mqttClient.subscribe(['ids/dual/alert','ids/dual/status']);
+      addLog('wifi',0,1,0,'CONNECTED',0);
+    });
+    S.mqttClient.on('message',(topic,msg)=>{
+      try{ process(JSON.parse(msg.toString())); }catch(e){}
+    });
+    S.mqttClient.on('close',()=>{
+      document.getElementById('mqtt-pill').className='conn-pill off';
+      document.getElementById('mqtt-label').textContent='MQTT: DISCONNECTED';
+    });
+  }catch(e){console.error(e);}
+}
+
+// ─── Demo ─────────────────────────────────────────────────
+const DEMO=[
+  {wifi:{class:0,conf:0.97,channel:6,pkt_rate:4.2}, eth:{class:0,conf:0.96,pkt_rate:12.1}},
+  {wifi:{class:1,conf:0.91,channel:6,pkt_rate:62},  eth:{class:0,conf:0.95,pkt_rate:14.3}},
+  {wifi:{class:0,conf:0.94,channel:1,pkt_rate:5.1}, eth:{class:1,conf:0.88,pkt_rate:320}},
+  {wifi:{class:0,conf:0.96,channel:11,pkt_rate:3.8},eth:{class:2,conf:0.84,pkt_rate:45}},
+  {wifi:{class:2,conf:0.87,channel:6,pkt_rate:9.4}, eth:{class:3,conf:0.92,pkt_rate:1800}},
+  {wifi:{class:0,conf:0.98,channel:6,pkt_rate:4.0}, eth:{class:0,conf:0.97,pkt_rate:11.5}},
+  {wifi:{class:3,conf:0.82,channel:1,pkt_rate:28},  eth:{class:5,conf:0.89,pkt_rate:950}},
+  {wifi:{class:1,conf:0.93,channel:6,pkt_rate:75},  eth:{class:3,conf:0.91,pkt_rate:2100}},
+];
+let demoIdx=0;
+function startDemo(){
+  if(S.demoInterval){clearInterval(S.demoInterval);S.demoInterval=null;return;}
+  addLog('wifi',0,1,0,'DEMO MODE',0);
+  addLog('eth',0,1,0,'DEMO MODE',0);
+  S.demoInterval=setInterval(()=>{
+    process(DEMO[demoIdx%DEMO.length]);
+    demoIdx++;
+  },2500);
+}
+
+// ─── Init ─────────────────────────────────────────────────
+drawChart('wifiChart',S.wifiHistory,S.wifiAttack,'#00d4ff');
+drawChart('ethChart', S.ethHistory, S.ethAttack, '#39ff6e');
+setArc('wifi',0,false); setArc('eth',0,false);
+
+// Auto-connect to MQTT broker using the default IP on page load
+window.addEventListener('load', () => { connectMQTT(); });
+</script>
+</body>
+</html>
